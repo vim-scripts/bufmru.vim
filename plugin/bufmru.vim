@@ -2,10 +2,15 @@
 " File:         bufmru.vim
 " Vimscript:	#2346
 " Created:      2008 Aug 18
-" Last Change:  2008 Aug 19
-" Rev Days:     2
+" Last Change:  2008 Aug 29
+" Rev Days:     5
 " Author:	Andy Wokula <anwoku@yahoo.de>
-" Version:	0.2
+" Version:	0.3
+
+" Description:
+"   Switch between MRU buffers from the current session. Like CTRL-^, but
+"   reach more buffers.  Visual Studio users not used to split windows may
+"   find this handy.
 
 " Usage:
 "   Press  <Space>  or  b  (back) to cycle mru buffer names in the cmdline.
@@ -25,8 +30,13 @@
 "	(always) Actually the internal stack of buffer numbers.  But you can
 "	manually add or remove buffer numbers or initialize the list.
 "
+"   :let g:bufmru_nummarks = 1
+"	(once) Put the number mark '0 ... '9 buffers in g:bufmru_bnrs.
+"	Note: This adds buffers to the buffer list!
+"
 " Notes:
-" - "special buffer": 'buftype' not empty or 'previewwindow' set.
+" - "special buffer": 'buftype' not empty or 'previewwindow' set for the
+"   window.  Not a special buffer if 'buflisted' is off.
 "
 " See Also:
 " - http://vim.wikia.com/wiki/Easier_buffer_switching
@@ -56,6 +66,10 @@ endif
 
 if !exists("g:bufmru_switchkey")
     let g:bufmru_switchkey = "<Space>"
+endif
+
+if !exists("g:bufmru_nummarks")
+    let g:bufmru_nummarks = 1
 endif
 
 augroup bufmru
@@ -135,20 +149,44 @@ func! <sid>echo()
     let bnr = s:bnr()
     let bufname = bufname(bnr)
     if bufname != ""
-	echo bnr bufname
+	echo bnr s:truncname(bufname, &columns-12-strlen(bnr)-1)
     else
 	echo bnr "[unnamed]"
     endif
+endfunc
+
+func! s:truncname(str, maxlen)
+    let len = strlen(a:str)
+    if len > a:maxlen
+	let amountl = (a:maxlen / 2) - 2
+	let amountr = a:maxlen - amountl - 3
+	let lpart = strpart(a:str, 0, amountl)
+	let rpart = strpart(a:str, len-amountr)
+	return strpart(lpart. '...'. rpart, 0, a:maxlen)
+    else
+	return a:str
+    endif
+endfunc
+
+func! s:initbnrs()
+    if g:bufmru_nummarks
+	call map(reverse(range(0,9)),'s:maketop(getpos("''".v:val)[0])')
+    endif
+    if bufnr("#") >= 1
+	call s:maketop(bufnr("#"))
+    endif
+    call s:maketop(bufnr(""))
 endfunc
 
 let s:bnr = 1
 let s:bidx = 0 
 
 if empty(g:bufmru_bnrs)
-    if bufnr("#") >= 1
-	call s:maketop(bufnr("#"))
+    if has("vim_starting")
+	au! bufmru VimEnter * call s:initbnrs()
+    else
+	call s:initbnrs()
     endif
-    call s:maketop(bufnr(""))
 endif
 
 exec "nmap" g:bufmru_switchkey "<sid>idxz<sid>echo<sid>m_"
