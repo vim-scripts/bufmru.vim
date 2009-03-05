@@ -3,9 +3,9 @@
 " Vimscript:	#2346
 " Created:      2008 Aug 18
 " Last Change:  2009 Mar 05
-" Rev Days:     21
+" Rev Days:     23
 " Author:	Andy Wokula <anwoku@yahoo.de>
-" Version:	1.0
+" Version:	2.0
 " Credits:	Anton Sharonov (g:bufmru_splashbufs)
 " License:	Vim license
  
@@ -26,6 +26,7 @@
 "
 "   in BUFMRU MODE:
 "   f  b	    reach more MRU buffers (forward/backward)
+"   <Tab>  <S-Tab>  same as f and b, only with g:bufmru_splashbufs == 0
 "   e  <Enter>	    accept current choice
 "   !		    accept current choice (an abandoned modified buffer
 "		    becomes hidden)
@@ -61,6 +62,12 @@
 "
 "   :let g:bufmru_limit = 40
 "	(often) Maximum number of entries to keep in the MRU list.
+"
+"   g:bufmru_wildmenu	(dictionary, initially not defined)
+"	(always, only for splashbufs=0) Instance of autoload/wildmenu.vim to
+"	show buffer names in a wildmenu-like list.  If not defined, bufmru
+"	tries to load the autoload script.  If that fails the value becomes
+"	empty ({}).  If values is {}, the default echo-method is used.
 "
 " Notes: {{{1
 " - "checked once": (re-)source the script to apply the change
@@ -133,6 +140,8 @@ if g:bufmru_splashbufs
     exec "nmap" g:bufmru_switchkey "<SID>idxz<SID>buf<SID>m_"
     nmap <SID>m_f	<SID>next<SID>buf<SID>m_
     nmap <SID>m_b	<SID>prev<SID>buf<SID>m_
+    sil! unmap <SID>m_<Tab>
+    sil! unmap <SID>m_<S-Tab>
     nmap <SID>m_!	<SID>bang<SID>m_
     nmap <SID>m_<Enter>	<SID>raccept
     nmap <SID>m_e	<SID>raccept
@@ -143,6 +152,8 @@ else
     exec "nmap" g:bufmru_switchkey "<SID>idxz<SID>echo<SID>m_"
     nmap <SID>m_f	<SID>next<SID>echo<SID>m_
     nmap <SID>m_b	<SID>prev<SID>echo<SID>m_
+    nmap <SID>m_<Tab>	<SID>m_f
+    nmap <SID>m_<S-Tab>	<SID>m_b
     nmap <SID>m_<Enter>	<SID>buf<SID>maybe
     nmap <SID>m_e	<SID>buf<SID>maybe
     nmap <SID>m_!	<SID>bang
@@ -213,6 +224,7 @@ func! s:bnr() "{{{
 	let bnr = g:bufmru_bnrs[s:bidx]
 	let i = 0
 	while !s:isvalidbuf(bnr)
+	    let s:wildmenu_update = 1
 	    if i < 2
 		call remove(g:bufmru_bnrs, s:bidx)
 	    else
@@ -226,6 +238,7 @@ func! s:bnr() "{{{
 	    let i += 1
 	endwhile
     catch
+	let s:wildmenu_update = 1
 	let bnr = bufnr("")
 	call s:maketop(bnr)
     endtry
@@ -241,13 +254,6 @@ func! <sid>next() "{{{
     let len = len(g:bufmru_bnrs)
     if s:bidx >= len
 	let s:bidx = len-1
-	if s:splash_const
-	    echohl WarningMsg
-	    echo "No older MRU buffers"
-	    echohl None
-	else
-	    let s:cyclewarn = 1
-	endif
     endif
 endfunc "}}}
 
@@ -259,13 +265,6 @@ func! <sid>prev() "{{{
     if s:bidx < 1
 	" let s:bidx = len(g:bufmru_bnrs) - 1
 	let s:bidx = 1
-	if s:splash_const
-	    echohl WarningMsg
-	    echo "At start buffer"
-	    echohl None
-	else
-	    let s:cyclewarn = 1
-	endif
     endif
 endfunc "}}}
 
@@ -274,7 +273,17 @@ func! <sid>idxz() "{{{
     let s:noautocmd = s:splash_const
     let s:bstart = bufnr("")
     let s:switch_ok = 1
-    let s:cyclewarn = 0
+    if !s:splash_const
+	if !exists("g:bufmru_wildmenu")
+	    try
+		let g:bufmru_wildmenu = wildmenu#New()
+	    catch
+		let g:bufmru_wildmenu = {}
+		echomsg "Bufmru: couldn't load autoload/wildmenu.vim"
+	    endtry
+	endif
+	let s:wildmenu_update = 1
+    endif
 endfunc "}}}
 
 func! <sid>buf() "{{{
@@ -317,26 +326,24 @@ func! <sid>maybe() "{{{
     return ""
 endfunc "}}}
 
-func! <sid>echo() " {{{
-    " redraw
-    let bnr = s:bnr()
-    if len(g:bufmru_bnrs) < 2
+" if buffer has no name: give it a name for the wild menu
+func! s:wname(bufname) "{{{
+    return a:bufname=="" ? "[unnamed]" : a:bufname
+endfunc "}}}
+
+func! <sid>echo() "{{{
+    if empty(g:bufmru_wildmenu)
 	return
     endif
-    let bmod = getbufvar(bnr, "&modified")
-    let bufnamewidth = (&columns-12) - (strlen(bnr)+1 + (bmod ? 4 : 0))
-    let bufname = bufname(bnr)
-    if s:cyclewarn| echohl WarningMsg| endif
-    if bufname != ""
-	echo bnr s:truncname(bufname, bufnamewidth)
-    else
-	echo bnr "[unnamed]"
+    call s:bnr()
+    if s:wildmenu_update
+	let showlist = map(g:bufmru_bnrs[1:],
+	    \ 's:wname(fnamemodify(bufname(v:val),":t"))'
+	    \.'. "+"[!getbufvar(v:val,"&modified")]')
+	call g:bufmru_wildmenu.updatewild(showlist)
+	let s:wildmenu_update = 0
     endif
-    if s:cyclewarn| echohl None| endif
-    if bmod
-	echohl WarningMsg| echon " [+]"| echohl None
-    endif
-    let s:cyclewarn = 0
+    call g:bufmru_wildmenu.showwild(s:bidx-1)
 endfunc "}}}
 
 func! <sid>yank() "{{{
@@ -344,7 +351,7 @@ func! <sid>yank() "{{{
     let fname = fnamemodify(bufname(bnr), ":p")
     let @@ = fname
     let cmd = "let @@ = '". fname. "'"
-    echo s:truncstr(cmd, &columns-12)
+    echo anwolib#TruncStr(cmd, &columns-12)
 endfunc "}}}
 
 func! <sid>reset(accept) "{{{
@@ -358,36 +365,6 @@ func! <sid>reset(accept) "{{{
 	" <Enter>, e just fail - remove the error message suggesting the
 	" overriding
 	exec "norm! :\<C-U>"
-    endif
-endfunc "}}}
-
-func! s:truncname(bufname, maxlen) "{{{
-    if strlen(a:bufname) <= a:maxlen
-	return a:bufname
-    endif
-    let bufname = a:bufname
-    let pat = '[^\\/]\zs[^\\/:]\+[\\/]\@='
-    while 1
-	let blen = strlen(bufname)
-	let shorter = substitute(bufname, pat,'','')
-	if strlen(shorter) == blen || blen <= a:maxlen
-	    break
-	endif
-	let bufname = shorter
-    endwhile
-    return s:truncstr(bufname, a:maxlen)
-endfunc "}}}
-
-func! s:truncstr(str, maxlen) "{{{
-    let len = strlen(a:str)
-    if len > a:maxlen
-	let amountl = (a:maxlen / 2) - 2
-	let amountr = a:maxlen - amountl - 3
-	let lpart = strpart(a:str, 0, amountl)
-	let rpart = strpart(a:str, len-amountr)
-	return strpart(lpart. '...'. rpart, 0, a:maxlen)
-    else
-	return a:str
     endif
 endfunc "}}}
 

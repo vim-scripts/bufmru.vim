@@ -1,0 +1,275 @@
+*bufmru.txt*	Switch to MRU (most recently used) buffers
+
+		For Vim version 7.0.  Last change: 2009 Mar 05
+		bufmru version: 2.0
+		By Andy Wokula <anwoku@yahoo.de>
+
+						*bufmru* *bufmru.vim*
+------------------------------------------------------------------------------
+DESCRIPTION
+
+Switch between MRU buffers from the current session.  Like CTRL-^, but reach
+more buffers (and maintain only one global list, not one list per window).
+Visual Studio users not used to split windows may find this handy.
+
+See also ~
+http://vim.wikia.com/wiki/Easier_buffer_switching
+Message-ID: <6690c6ec-7f1d-4430-9271-0511f8f874e3@e39g2000hsf.googlegroups.com> 
+
+------------------------------------------------------------------------------
+INSTALLATION
+
+Instructions - no surprise here: ~
+Copy the files from the zip archive below ~/.vim (Unix) or ~\vimfiles or
+$VIM\vimfiles (Win32), and do |:helpt| on the doc path.  See |add-plugin|.
+See |vimball| if you obtained the bufmru.vba.gz archive.
+
+Files: ~
+plugin/bufmru.vim	main plugin file
+doc/bufmru.txt		this help file
+autoload/wildmenu.vim	with |g:bufmru_splashbufs|= 0: show the buffer names
+			in a |wildmenu| like list
+autoload/anwolib.vim	anwolib#TruncStr()
+
+Install the help file (example): >
+	:e ~/.vim/doc/bufmru.txt
+	:helpt %:p:h
+
+Versions: ~
+bufmru 1.x	standalone version (just the plugin file) without wildmenu
+bufmru 2.x	several files
+
+Get updates: ~
+http://vim.sf.net/scripts/script.php?script_id=2346
+
+------------------------------------------------------------------------------
+USAGE
+						*bufmru-keys*
+Usage highly depends on |g:bufmru_splashbufs|: although the same key does the
+same thing, the effect looks very different.
+
+<Space>			Enter Bufmru Mode and show the most recently used
+			buffer.
+
+Only in BUFMRU MODE:
+f			Reach older MRU buffers (forward).
+b			Reach newer MRU buffers (backward).
+
+e		or
+<Enter>			Accept the current choice (|g:bufmru_confclose|).
+
+!			Accept the current choice.  confclose is not used, an
+			abandoned modified buffer becomes hidden.
+
+q		or
+<Esc>			Quit the mode and forcibly go back to the start
+			buffer.
+
+y			Copy and echo the selected file name (the file name
+			includes the full path).
+
+only with splashbufs = 0:
+<Tab>			same as f
+<S-Tab>			same as b
+
+Bufmru Mode times out after 'timeoutlen' ms, I suggest to increase the default
+value.  A key not mapped in the mode (e.g. <Space>) quits the mode and
+executes as usual.
+
+MISC DETAILS {{{
+
+Keys: ! q <Esc>
+With 'nohidden' and if the buffer to be abandoned is not modified, then the
+buffer will not become hidden.  Caused by |:buffer-!|.
+
+}}}
+
+------------------------------------------------------------------------------
+CONFIGURATION
+
+Sometimes the "g:bufmru_" prefix is omitted when these variables are
+mentioned.
+
+					splashbufs *g:bufmru_splashbufs*
+:let g:bufmru_splashbufs = 0
+	(checked once) If 1, switch buffers instantly like with CTRL-^.  If
+	0 (default), only show MRU buffer names in the command-line and switch
+	to a buffer when you press e or <Enter>.
+
+						*g:bufmru_switchkey*
+:let g:bufmru_switchkey = "<Space>"
+	(checked once) Key to enter Bufmru Mode.
+
+					confclose *g:bufmru_confclose*
+:let g:bufmru_confclose = 0
+	(always) Use |:confirm| (1) when abandoning a modified buffer.
+	Otherwise (0, default) you'll get an error message, unless 'hidden' is
+	set.
+
+						*g:bufmru_limit*
+:let g:bufmru_limit = 40
+	(always) Maximum number of entries to keep in the MRU list.
+
+			*g:bufmru_read_nummarks* *Bufmru_Read_Nummarks()*
+:let g:bufmru_read_nummarks = 0
+	(checked once) Add the number mark '0..'9 buffers to g:bufmru_bnrs.
+	Note: This adds buffers to the buffer list and makes them all listed!
+
+	You can add these buffers manually: >
+		:call Bufmru_Read_Nummarks()
+
+<	The list of added buffer numbers also is returned.  It may contain
+	duplicates, if you're interested in the list, you can do >
+		:let bnr_list = anwolib#RemoveDups(Bufmru_Read_Nummarks())
+<
+						*g:bufmru_bnrs*
+:let g:bufmru_bnrs = []
+    (always) The internal stack of MRU buffer numbers.  Normally, you'll leave
+    this alone, but you can manually add or remove buffer numbers or
+    initialize the list.  You don't need to worry about wrong numbers.
+
+						*g:bufmru_wildmenu*
+g:bufmru_wildmenu	(dictionary, initially not defined)
+    (checked always, only if splashbufs=0)
+    Instance of autoload/wildmenu.vim to show buffer names in a wildmenu-like
+    list.  If not defined, bufmru tries to create the instance.  If that fails
+    the value becomes empty ({}) and you will get a warning message.
+
+------------------------------------------------------------------------------
+TODO
+
+HISTORY {{{
+v2.0 (2009 Mar 05) (after v0.8.3)
+* dropped the default <sid>echo() function, now wildmenu is required
+* Functions:
+  	Bufmru_Read_Nummarks()
+* Keys:
+  !	can now be used like e and <Enter> (not only _after_ e and <Enter>)
+* if s:bidx becomes to large after a cleanup of g:bufmru_bnrs, it will now
+  point to the end of the list, not to the start
+* BF: unnamed buffers didn't get a name in the wildmenu (now "[unnamed]")
+* BF: ("auto fixed" by dropping <sid>echo()) with splashbufs=1, unitialized
+  g:bufmru_buftabs in <sid>next() and <sid>prev() (Anton Sharonov)
+
+v0.8.3 (2009 Mar 04)
+* autoload/wildmenu.vim replaces autoload/buftabs.vim
+* providing buffer names to the wildmenu is now done by the plugin
+  (wildmenu.vim is more general than buftabs.vim)
+* Variables:
+  	g:bufmru_wildmenu	replaces g:bufmru_buftabs
+* Functions:
+  	anwolib#TruncStr()	replaces buftabs#TruncStr()
+
+v0.8.1 (2009 Mar 03)
+* Keys:
+  <Tab> <S-Tab>	synonym for f and b (for the wildmenu list)
+* Variables:
+  	g:bufmru_limit		maximum number of entries in the MRU list
+* anwolib#TruncStr() again moved to buftabs#TruncStr()
+* s:buftabs_update to notify if wildmenu list needs updating (BF actually)
+* don't echo "No more MRU buffers", "At start buffer" if buftabs.vim is
+  available
+
+v0.8 (2009 Mar 02)
+* added autoload/buftabs.vim: (for splashbufs=0) provide an object prototype
+  to show the buffer names in a wildmenu like list; if this script is not
+  available the old <sid>echo() method will be used
+* Variables:
+	g:bufmru_buftabs	instance of the buftabs object
+* s:truncstr() function extracted to anwolib#TruncStr()
+* added fold markers
+* the current buffer cannot longer be reached with key b (the command :b %
+  basically does nothing)
+
+v0.7.3 (2009 Mar 02)
+* BF: BF in v0.7.2 needs restriction to splashbufs=1
+* BF: overriding added also for splashbufs=0: continue Bufmru Mode after e or
+  <Enter> if abandoning a buffer fails, to be able to press ! afterwards
+
+v0.7.2 (2009 Mar 02)
+* Keys:
+  !	to forcibly hide a buffer if abandoning fails (buffer is modified and
+  	confclose is 0)
+* BF: keys f and b changed the MRU index s:bidx also if abandoning the current
+  buffer failed
+
+v0.7.1 (2009 Mar 02)
+* Variables:
+  g:bufmru_confclose	changed!  With value 0 (new default!) don't :hide a
+			buffer, give error message instead.  This was the
+	missing alternative to :conf and :hide.  :hide was dropped, because if
+	you want to hide buffers, you are likely to set 'hidden', and
+	overriding the error message with the bang key (v0.7.2) will do hide
+	the buffer.
+* added message "At start buffer"
+* minor: after init: :au! bufmru VimEnter
+
+v0.7 (2009 Jan 17)
+* Keys:
+  f	replaces <Space> in Bufmru Mode
+
+v0.6.1 (2008 Nov 19)
+* added credits!
+* readded s:bstart (when did it get lost?) to go back to the start buffer
+  (user hits q when splashbufs=1)
+
+v0.6 (2008 Nov 11)
+* s:splash_const to protect the g:bufmru_splashbufs choice
+* no more cycling: going forward/backward stops at either end of the MRU list
+* changed splashbufs internals: removed s:maketop_disabled, added s:noautocmd;
+  two different sets of mappings (same keys, different rhs)
+
+v0.5_splashbufs (2008 Nov 09)
+* Variables:
+  g:bufmru_splashbufs	splashbufs feature can be enabled (1) or disabled (0,
+  			default)
+
+v0.4_splashbufs (2008 Nov 07)
+* merge of v0.3_splashbufs and v0.4
+
+v0.4 (2008 Oct 09) (after v0.3)
+* Keys: 
+  y	to copy a file name to the unnamed register
+* Valid buffer number: now also 'buflisted' required
+* s:truncname() renamed to s:truncstr()
+* Variables:
+  g:bufmru_read_nummarks	renamed from g:bufmru_nummarks
+			BF: added buffers are now forcibly make listed
+
+v0.3_splashbufs (2008 Nov 04) (thanks to Anton Sharonov)
+* Version with (unconditional) splashbufs feature: switch buffers immediately
+  when pressing <Space>, b or f.  Quitting with q or <Esc> switches back to
+  the start buffer.
+
+v0.3 (2008 Aug 29)
+* Variables:
+  g:bufmru_nummarks	access to the buffers behind '0 .. '9; init delayed
+  			until VimEnter
+* s:truncname() to shorten strings that don't fit in the cmdline
+
+v0.2 (2008 Aug 19)
+* Keys:
+  b	to cycle backwards
+  q and <Esc> to quit (to have keys that quit and do nothing else)
+* Variables:
+  g:bufmru_switchkey	allow mapping other keys than <Space>
+  g:bufmru_confclose 	use :confirm or :hide when it comes to abandoning a
+			modified buffer and 'nohidden' is set
+* Valid buffer number: bufnr >= 1 and bufexists() and 'buftype' empty
+* Use filter() to remove more than a few invalid buffers.
+* Split the window, if buffer to be abandoned is "special": special =
+  'buftype' not empty or 'previewwindow' set.
+* Init buffer list with current and alternate buffer.
+
+v0.1 (2008 Aug 18) initial version
+* Vim Version: Vim 7.0
+* Keys: <Space>
+  in Bufmru Mode: <Space> to cycle; e and <Enter> to accept
+* Current choice echoed in the cmdline
+* Variables:
+  g:bufmru_bnrs		list of buffer numbers
+* BufEnter autocmd to collect MRU buf numbers
+
+}}}
+
+vim:tw=78:fo=tcq2r1:sts=0:ts=8:sw=8:fdm=marker:
