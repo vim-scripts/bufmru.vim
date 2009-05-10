@@ -2,10 +2,11 @@
 " File:         bufmru.vim
 " Vimscript:	#2346
 " Created:      2008 Aug 18
-" Last Change:  2009 May 08
-" Rev Days:     34
+" Last Change:  2009 May 10
+" Rev Days:     33
 " Author:	Andy Wokula <anwoku@yahoo.de>
-" Version:	2.7 (wildmenu only)
+" Version:	3.3 (splashbufs only)
+" Credits:	Anton Sharonov (g:bufmru_splashbufs)
 " License:	Vim license
 
 " Comments
@@ -18,11 +19,11 @@
 
 " Usage: {{{1
 "   KEY(S)	    ACTION
-"   <Space>	    show the most recently used buffer, enter Bufmru Mode
+"   <Space>	    switch to the most recently used buffer and enter Bufmru
+"   		    mode.
 "
 "   in BUFMRU MODE:
 "   f  b	    reach more MRU buffers (forward/backward)
-"   <Tab>  <S-Tab>  same as f and b, only with g:bufmru_splashbufs == 0
 "   e  <Enter>	    accept current choice
 "   !		    accept current choice (an abandoned modified buffer
 "		    becomes hidden)
@@ -33,6 +34,10 @@
 "   (e.g. <Space>) quits the mode and executes as usual.
 
 " Configuration: {{{1
+"   :let g:bufmru_lazy_filetype = 0
+"	(checked always) If 1, do lazy filetype detection when going through
+"	the buffers with f and b.  Not used if 'hidden' is set.
+"
 "   :let g:bufmru_switchkey = "<Space>"
 "	(checked once) Key to enter Bufmru Mode.
 "
@@ -57,18 +62,6 @@
 "	(checked when adding a bufnr) Maximum number of entries to keep in
 "	the MRU list.
 "
-"   g:bufmru_wildmenu	(dictionary, initially not defined)
-"	(always) Instance of autoload/wildmenu.vim to show buffer names in a
-"	wildmenu-like list.  If not defined, bufmru tries to load the
-"	autoload script.  If that fails the value becomes empty ({}) -- and
-"	bufmru quite unusable.
-"
-"   :let g:bufmru_wilditems = "bufnr,shortpath"
-"	(always) How to display entries in the "wildmenu":
-"	"bufnr"		with prepended buffer number
-"	"shortpath"	with pathshorten() applied to the bufname() 
-"	There is no error message for wrong items.
-"
 " Notes: {{{1
 " - "checked once": (re-)source the script to apply the change
 " - "special buffer": 'buftype' not empty or 'previewwindow' set for the
@@ -79,6 +72,14 @@
 " - Message-ID: <6690c6ec-7f1d-4430-9271-0511f8f874e3@e39g2000hsf.googlegroups.com>
 
 " TODO {{{1
+" + no limit with g:bufmru_limit = 0
+" + option: turn off filetype events while switching, detect filetype when
+"   accepting the choice
+" + :filetype detect
+"   * not after :syn off (or :filetype off)
+"   * not needed if buffer is shown in another window
+" + :let s:did_bufread=0 <-- set to zero only if switching to _another_
+"   buffer
 
 " End Of Comments {{{1
 " }}}1
@@ -101,6 +102,10 @@ set cpo&vim
 "}}}
 
 " Customization: "{{{
+if !exists("g:bufmru_lazy_filetype")
+    let g:bufmru_lazy_filetype = 0
+endif
+
 if !exists("g:bufmru_confclose")
     let g:bufmru_confclose = 0
 endif
@@ -121,44 +126,35 @@ endif
 if !exists("g:bufmru_read_nummarks")
     let g:bufmru_read_nummarks = 0
 endif
-
-if !exists("g:bufmru_wilditems")
-    let g:bufmru_wilditems = "bufnr,shortpath"
-endif
-
 "}}}
-
 " Autocommands: "{{{
 augroup bufmru
-    au! BufEnter * call s:maketop(bufnr(""),1)
+    au!
+    au BufEnter * if !s:noautocmd| call s:maketop(bufnr(""),1)| endif
+    au BufRead * let s:did_bufread = 1
 augroup End "}}}
-
 " Mappings: {{{1
-exec "nmap" g:bufmru_switchkey "<SID>idxz<SID>echo<SID>m_"
-nmap <SID>m_f	    <SID>next<SID>echo<SID>m_
-nmap <SID>m_b	    <SID>prev<SID>echo<SID>m_
-nmap <SID>m_<Tab>   <SID>m_f
-nmap <SID>m_<S-Tab> <SID>m_b
-nmap <SID>m_<Enter> <SID>buf<SID>maybe<SID>m2
-nmap <SID>m_e	    <SID>buf<SID>maybe<SID>m2
-nmap <SID>m_!	    <SID>bang<SID>cleanup
-nn <script> <SID>m_<Esc> <SID>cleanup:<C-U><BS>
-nn <script> <SID>m_q     <SID>cleanup:<C-U><BS>
-nn <script> <SID>m_      <SID>cleanup:<C-U><BS>
+exec "nmap" g:bufmru_switchkey "<SID>idxz<SID>buf<SID>m_"
+nmap <SID>m_f	    <SID>next<SID>buf<SID>m_
+nmap <SID>m_b	    <SID>prev<SID>buf<SID>m_
+sil! unmap	    <SID>m_<Tab>
+sil! unmap	    <SID>m_<S-Tab>
+nmap <SID>m_!	    <SID>bang<SID>m_
+nmap <SID>m_<Enter> <SID>raccept
+nmap <SID>m_e	    <SID>raccept
+nmap <SID>m_<Esc>   <SID>reset
+nmap <SID>m_q	    <SID>reset
+nmap <SID>m_	    <SID>raccept
 nmap <SID>m_y	    <SID>yank<SID>m_
 
 nnoremap <silent> <SID>idxz	:<C-U>call<sid>idxz()<cr>
 nnoremap <silent> <SID>next	:call<sid>next()<cr>
-nnoremap <silent> <SID>prev	:call<sid>prev()<cr>
-nnoremap <silent> <SID>buf	:call<sid>buf()<cr>
-nnoremap <silent> <SID>echo	:call<sid>echo()<cr>
-nnoremap <silent> <SID>yank	:call<sid>yank()<cr>
+nnoremap <silent> <SID>prev   	:call<sid>prev()<cr>
+nnoremap <silent> <SID>buf    	:call<sid>buf()<cr>
+nnoremap <silent> <SID>raccept 	:call<sid>reset(1)<cr>
+nnoremap <silent> <SID>reset 	:call<sid>reset(0)<cr>
+nnoremap <silent> <SID>yank   	:call<sid>yank()<cr>
 nnoremap <silent> <SID>bang	:call<sid>bang()<cr>
-nnoremap <silent> <SID>cleanup	:call<sid>cleanup()<cr>
-
-" conditional type ahead <SID>m_
-nmap <expr> <SID>maybe		<sid>maybe()
-" Vim bug: cannot get the type ahead directly from an <expr> map
 " }}}
 
 " Global Functions:
@@ -206,7 +202,6 @@ func! s:bnr() "{{{
 	let bnr = g:bufmru_bnrs[s:bidx]
 	let i = 0
 	while !s:isvalidbuf(bnr)
-	    let s:wildmenu_update = 1
 	    if i < 2
 		call remove(g:bufmru_bnrs, s:bidx)
 	    else
@@ -220,7 +215,6 @@ func! s:bnr() "{{{
 	    let i += 1
 	endwhile
     catch
-	let s:wildmenu_update = 1
 	let bnr = bufnr("")
 	call s:maketop(bnr)
     endtry
@@ -229,43 +223,68 @@ endfunc "}}}
 
 func! <sid>next() "{{{
     " let s:bidx = (s:bidx+1) % len(g:bufmru_bnrs)
+    if !s:switch_ok
+	return
+    endif
+    call s:check_start_ei()
     let s:bidx += 1
     let len = len(g:bufmru_bnrs)
     if s:bidx >= len
 	let s:bidx = len-1
+	echohl WarningMsg
+	echo "No older MRU buffers"
+	echohl None
     endif
 endfunc "}}}
 
 func! <sid>prev() "{{{
+    if !s:switch_ok
+	return
+    endif
+    call s:check_start_ei()
     let s:bidx -= 1
-    if s:bidx < 1
+    if s:bidx < 0
 	" let s:bidx = len(g:bufmru_bnrs) - 1
-	let s:bidx = 1
+	let s:bidx = 0
+	echohl WarningMsg
+	echo "At start buffer"
+	echohl None
+    endif
+endfunc "}}}
+
+" check if ignoring the FileType event should be started now
+func! s:check_start_ei() "{{{
+    if !s:start_ei
+	return
+    endif
+    let s:start_ei = 0
+    if s:quitnormal
+	set eventignore+=FileType
+	let s:quitnormal = 0
     endif
 endfunc "}}}
 
 func! <sid>idxz() "{{{
-    let s:bidx = 1
+    let s:noautocmd = 1
+    let s:bstart = bufnr("")
     let s:switch_ok = 1
-    if s:quitnormal
-	let s:sav_tm = &timeoutlen
-	let s:quitnormal = 0
+    let s:start_ei = g:bufmru_lazy_filetype && !&hidden
+    let s:did_bufread = 0
+
+    let s:bidx = 1
+    let len = len(g:bufmru_bnrs)
+    if s:bidx >= len
+	let s:bidx = 0
+	echohl WarningMsg
+	echo "Only one MRU buffer"
+	echohl None
     endif
-    set timeoutlen=60000
-    if !exists("g:bufmru_wildmenu")
-	try
-	    let g:bufmru_wildmenu = wildmenu#New()
-	catch
-	    let g:bufmru_wildmenu = {}
-	    echomsg "Bufmru: couldn't load autoload/wildmenu.vim"
-	endtry
-    endif
-    let s:wildmenu_update = 1
-    let s:n_show = 0
 endfunc "}}}
 
 func! <sid>buf() "{{{
+    let oldbnr = bufnr("")
     let bnr = s:bnr()
+    let s:did_bufread = s:did_bufread && oldbnr == bnr
     let s:switch_ok = 1
     try
 	if &buftype != '' || &previewwindow
@@ -300,67 +319,61 @@ func! <sid>bang() "{{{
     let s:switch_ok = 1
 endfunc "}}}
 
-func! <sid>maybe() "{{{
-    " return s:switch_ok ? "" : "<SID>m_"
-    if s:switch_ok
-	if &lazyredraw
-	    nnoremap <SID>m2 <C-G>
-	else
-	    nnoremap <SID>m2 <Nop>
-	endif
-	" Vim bug?  <Nop> with 'lz' keeps the cursor in the cmdline and
-	" times out as if there were type ahead
-	call <sid>cleanup()
-    else
-	nmap <SID>m2 <SID>m_
-    endif
-    return ""
-endfunc "}}}
-
-" if buffer has no name: give it a name for the wild menu
-func! s:wname(bufname) "{{{
-    return a:bufname=="" ? "[unnamed]" : a:bufname
-endfunc "}}}
-
-func! <sid>echo() "{{{
-    if empty(g:bufmru_wildmenu)
-	return
-    endif
-    call s:bnr()
-    if s:wildmenu_update
-	let witems = split(g:bufmru_wilditems, ",")
-	let wname_expr =
-	    \ (index(witems, "bufnr")>=0 ? 'v:val."-".' : '')
-	    \.(index(witems, "shortpath")>=0
-	    \ ? 's:wname(pathshorten(bufname(v:val)))'
-	    \ : 's:wname(fnamemodify(bufname(v:val),":t"))')
-	    \.'.(getbufvar(v:val,"&mod") ? "[+]" : "")'
-	let showlist = map(g:bufmru_bnrs[1:], wname_expr)
-	call g:bufmru_wildmenu.updatewild(showlist)
-	let s:wildmenu_update = 0
-	let s:n_show = len(g:bufmru_bnrs) - 1
-    endif
-    if s:n_show >= 1
-	call g:bufmru_wildmenu.showwild(s:bidx-1)
-    else
-	echohl WarningMsg
-	echo "Only one MRU buffer"
-	echohl None
-    endif
-endfunc "}}}
-
 func! <sid>yank() "{{{
     let bnr = s:bnr()
     let fname = fnamemodify(bufname(bnr), ":p")
     let @@ = fname
     let cmd = "let @@ = '". fname. "'"
-    call anwolib#FitEcho(cmd)
+    call s:fitecho(cmd)
 endfunc "}}}
 
-func! <sid>cleanup() "{{{
+func! <sid>reset(accept) "{{{
+    call s:maketop(bufnr(""))
+    let s:noautocmd = 0
     if !s:quitnormal
-	let &timeoutlen = s:sav_tm
+	set eventignore-=FileType
 	let s:quitnormal = 1
+	if a:accept || bufnr("") == s:bstart
+	    if exists("g:did_load_filetypes") && s:did_bufread
+		filetype detect
+		" echohl TODO
+		" echo "did :filetype detect"
+		" echohl None
+		" sleep 500m
+	    endif
+	endif
+    endif
+    if !a:accept
+	" try to go back, no matter if this doesn't work:
+	exec "buf!" s:bstart
+	" no :redraw, mode will end soon
+    endif
+    if !s:switch_ok
+	" remove the error message suggesting the overriding
+	exec "norm! :\<C-U>"
+    endif
+endfunc "}}}
+
+" general functions:
+func! s:fitecho(str) "{{{
+    echo s:truncstr(a:str, s:cmdline_width())
+endfunc "}}}
+func! s:cmdline_width() "{{{
+    let showcmd_off = &sc ? 11 : 0
+    let laststatus_off = &ls==0 ? 19 : &ls==2 ? 0 : winnr('$')==1 ? 19 : 0
+    return &columns - showcmd_off - laststatus_off - 1
+    " default 'rulerformat' assumed
+endfunc "}}}
+func! s:truncstr(str, maxlen) "{{{
+    let len = strlen(a:str)
+    if len > a:maxlen
+	let amountl = (a:maxlen / 2) - 2
+	let amountr = a:maxlen - amountl - 3
+	let lpart = strpart(a:str, 0, amountl)
+	let rpart = strpart(a:str, len-amountr)
+	return strpart(lpart. '...'. rpart, 0, a:maxlen)
+    else
+	return a:str
     endif
 endfunc "}}}
 
@@ -376,7 +389,8 @@ func! s:initbnrs() "{{{
 endfunc "}}}
 
 " Do Init: {{{1
-let s:quitnormal = 1
+let s:noautocmd = 0
+let s:quitnormal = 1	" only for g:bufmru_lazy_filetype=1
 
 if empty(g:bufmru_bnrs)
     if has("vim_starting")
