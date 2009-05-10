@@ -1,10 +1,18 @@
 " function library -- some small general unrelated homeless functions ...
 " File:         anwolib.vim
 " Created:      2007 Dec 07
-" Last Change:  2009 Mar 05
-" Rev Days:     9
+" Last Change:  2009 May 10
+" Rev Days:     14
 " Author:	Andy Wokula <anwoku@yahoo.de>
 " License:	Vim license
+
+" Other libs to consider: {{{
+"   genutils	Vimscript #197 (Hari Krishna Dara)
+"   cecutil	Vimscript #1066 (DrChip)
+"   tlib	Vimscript #1863 (Thomas Link)
+"   TOVL	Vimscript #1963 (Marc Weber)
+"		http://github.com/MarcWeber/theonevimlib
+" }}}
 
 " like extend({baselist}, {append}), but only insert missing items
 " Notes:
@@ -23,7 +31,7 @@ func! anwolib#ExtendUniq(baselist, append, ...) "{{{
     return a:baselist
 endfunc "}}}
 
-" (in place) remove duplicates
+" (in place) remove duplicates from a list
 func! anwolib#RemoveDups(list) "{{{
     " Changed: 2009 Mar 05
     let len = len(a:list)
@@ -131,6 +139,21 @@ func! anwolib#Rot13(str) "{{{
     return tr(a:str, from, to)
 endfunc "}}}
 
+func! anwolib#CmdlineWidth() "{{{
+    let showcmd_off = &showcmd ? 11 : 0
+    let laststatus_off = !&ruler || &laststatus==2 ? 0
+	\ : &laststatus==0 ? 19 : winnr('$')==1 ? 19 : 0
+    return &columns - showcmd_off - laststatus_off - 1
+    " rule of thumb, former 17 for the ruler wasn't enough
+    " has('cmdline_info') && has('statusline')
+    " default 'rulerformat' assumed
+    " should be merged with tlib#notify#*()
+endfunc "}}}
+
+func! anwolib#FitEcho(str) "{{{
+    echo anwolib#TruncStr(a:str, anwolib#CmdlineWidth())
+endfunc "}}}
+
 " if {str} is longer than {maxlen}, insert "..." in the middle; return the
 " modified string
 func! anwolib#TruncStr(str, maxlen) "{{{
@@ -159,10 +182,29 @@ func! anwolib#TruncStr(str, maxlen) "{{{
     endif
 endfunc "}}}
 
+" like TruncStr(), but do pathshorten() first
+func! anwolib#TruncFilename(filename, maxlen) "{{{
+    " Changed: 2009 Mar 07
+    if strlen(a:filename) <= a:maxlen
+	return a:filename
+    endif
+    let filename = a:filename
+    let pat = '[^\\/]\zs[^\\/:]\+[\\/]\@='
+    while 1
+	let blen = strlen(filename)
+	let shorter = substitute(filename, pat,'','')
+	if strlen(shorter) == blen || blen <= a:maxlen
+	    break
+	endif
+	let filename = shorter
+    endwhile
+    return anwolib#TruncStr(filename, a:maxlen)
+endfunc "}}}
+
 func! anwolib#MagicEscape(pat, ...) "{{{
     " Changed: 2009 Mar 03
     " a:1   fbc, extra search forward (/) or backward (?) character to be
-    " 	    escaped
+    " 	    escaped (default '/')
     let fbc = a:0>=1 ? a:1 : '/'
     return escape(a:pat, fbc. '\.*$^~[')
 endfunc "}}}

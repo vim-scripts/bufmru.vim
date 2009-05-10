@@ -1,6 +1,6 @@
 *bufmru.txt*	Switch to MRU (most recently used) buffers
 
-		For Vim version 7.0.  Last change: 2009 Mar 05
+		For Vim version 7.0.  Last change: 2009 May 10
 		bufmru version: 2.0
 		By Andy Wokula <anwoku@yahoo.de>
 
@@ -10,7 +10,6 @@ DESCRIPTION
 
 Switch between MRU buffers from the current session.  Like CTRL-^, but reach
 more buffers (and maintain only one global list, not one list per window).
-Visual Studio users not used to split windows may find this handy.
 
 See also ~
 http://vim.wikia.com/wiki/Easier_buffer_switching
@@ -18,7 +17,7 @@ Message-ID: <6690c6ec-7f1d-4430-9271-0511f8f874e3@e39g2000hsf.googlegroups.com>
 
 ------------------------------------------------------------------------------
 INSTALLATION
-
+						*bufmru-install*
 Instructions - no surprise here: ~
 Copy the files from the zip archive below ~/.vim (Unix) or ~\vimfiles or
 $VIM\vimfiles (Win32), and do |:helpt| on the doc path.  See |add-plugin|.
@@ -27,8 +26,7 @@ See |vimball| if you obtained the bufmru.vba.gz archive.
 Files: ~
 plugin/bufmru.vim	main plugin file
 doc/bufmru.txt		this help file
-autoload/wildmenu.vim	with |g:bufmru_splashbufs|= 0: show the buffer names
-			in a |wildmenu| like list
+autoload/wildmenu.vim	show the buffer names in a |wildmenu| like list
 autoload/anwolib.vim	anwolib#TruncStr()
 
 Install the help file (example): >
@@ -36,17 +34,25 @@ Install the help file (example): >
 	:helpt %:p:h
 
 Versions: ~
-bufmru 1.x	standalone version (just the plugin file) without wildmenu
-bufmru 2.x	several files
+bufmru 1.x	standalone version (just the plugin file) without wildmenu,
+		buffer names are shown one after another in the cmdline area
+
+bufmru 2.x	wildmenu version (and the only version containing the help
+		file)
+		nicer version of v1
+
+bufmru 3.x	splashbufs version:
+		Buffers are switched instantly like with CTRL-^; but switching
+		is meant to be a preview as long as Bufmru is active.
 
 Get updates: ~
 http://vim.sf.net/scripts/script.php?script_id=2346
 
 ------------------------------------------------------------------------------
 USAGE
-						*bufmru-keys*
-Usage highly depends on |g:bufmru_splashbufs|: although the same key does the
-same thing, the effect looks very different.
+						*bufmru-usage*
+Usage is similar in all versions, but the time when buffers are really
+switched is different.
 
 <Space>			Enter Bufmru Mode and show the most recently used
 			buffer.
@@ -58,23 +64,25 @@ b			Reach newer MRU buffers (backward).
 e		or
 <Enter>			Accept the current choice (|g:bufmru_confclose|).
 
-!			Accept the current choice.  confclose is not used, an
-			abandoned modified buffer becomes hidden.
+!			Forcibly accept the current choice.  confclose is not
+			used, an abandoned modified buffer becomes hidden.
+			A window with a special buffer is not split (override
+			E36 ).
 
 q		or
-<Esc>			Quit the mode and forcibly go back to the start
-			buffer.
+<Esc>			Quit the mode and (splashbufs version) forcibly go
+			back to the start buffer.
 
-y			Copy and echo the selected file name (the file name
-			includes the full path).
+y			Copy and echo the selected file name (with full path).
 
-only with splashbufs = 0:
+addtional keys in the wildmenu version:
 <Tab>			same as f
 <S-Tab>			same as b
 
-Bufmru Mode times out after 'timeoutlen' ms, I suggest to increase the default
-value.  A key not mapped in the mode (e.g. <Space>) quits the mode and
-executes as usual.
+Bufmru Mode times out after 60 seconds in the wildmenu version and after
+'timeoutlen' ms in the splashbufs version.  A key not mapped in Bufmru Mode
+quits the mode and executes as usual, e.g. pressing <Space> will re-enter the
+mode again.
 
 MISC DETAILS {{{
 
@@ -87,14 +95,10 @@ buffer will not become hidden.  Caused by |:buffer-!|.
 ------------------------------------------------------------------------------
 CONFIGURATION
 
+Most variables can be changed during session ("checked always"), only some
+need to be set in the vimrc ("checked once").
 Sometimes the "g:bufmru_" prefix is omitted when these variables are
 mentioned.
-
-					splashbufs *g:bufmru_splashbufs*
-:let g:bufmru_splashbufs = 0
-	(checked once) If 1, switch buffers instantly like with CTRL-^.  If
-	0 (default), only show MRU buffer names in the command-line and switch
-	to a buffer when you press e or <Enter>.
 
 						*g:bufmru_switchkey*
 :let g:bufmru_switchkey = "<Space>"
@@ -102,43 +106,84 @@ mentioned.
 
 					confclose *g:bufmru_confclose*
 :let g:bufmru_confclose = 0
-	(always) Use |:confirm| (1) when abandoning a modified buffer.
-	Otherwise (0, default) you'll get an error message, unless 'hidden' is
-	set.
+	(checked always) Use :confirm (1) when switching buffers.  If
+	a modified buffer cannot be abandoned (can happen when 'nohidden' is
+	set), this will prompt you with a dialog.  Otherwise (0, default)
+	you'll get an error message.
 
 						*g:bufmru_limit*
 :let g:bufmru_limit = 40
-	(always) Maximum number of entries to keep in the MRU list.
+	(checked on BufEnter) Maximum number of entries to keep in the MRU
+	list.  There is no limit if the value is zero or less than zero.
 
 			*g:bufmru_read_nummarks* *Bufmru_Read_Nummarks()*
 :let g:bufmru_read_nummarks = 0
 	(checked once) Add the number mark '0..'9 buffers to g:bufmru_bnrs.
-	Note: This adds buffers to the buffer list and makes them all listed!
+
+	Note: This adds buffers to the buffer list and makes them all listed
+	(i.e. 'buflisted')!
 
 	You can add these buffers manually: >
 		:call Bufmru_Read_Nummarks()
 
-<	The list of added buffer numbers also is returned.  It may contain
-	duplicates, if you're interested in the list, you can do >
+<	The list of added buffer numbers is returned.  It can contain
+	duplicates, if you want a list of unique numbers, you can do: >
 		:let bnr_list = anwolib#RemoveDups(Bufmru_Read_Nummarks())
 <
 						*g:bufmru_bnrs*
 :let g:bufmru_bnrs = []
-    (always) The internal stack of MRU buffer numbers.  Normally, you'll leave
-    this alone, but you can manually add or remove buffer numbers or
-    initialize the list.  You don't need to worry about wrong numbers.
+	(checked always) The internal stack of MRU buffer numbers.  Normally,
+	you'll leave this alone, but you can manually add or remove buffer
+	numbers or initialize the list.  Wrong numbers will be sorted out
+	automatically, but duplicates are not removed.
 
 						*g:bufmru_wildmenu*
 g:bufmru_wildmenu	(dictionary, initially not defined)
-    (checked always, only if splashbufs=0)
-    Instance of autoload/wildmenu.vim to show buffer names in a wildmenu-like
-    list.  If not defined, bufmru tries to create the instance.  If that fails
-    the value becomes empty ({}) and you will get a warning message.
+	(checked always, v2 only)
+	Instance of autoload/wildmenu.vim to show buffer names in
+	a wildmenu-like list.  If not defined, bufmru tries to create the
+	instance.  If that fails the value becomes empty ({}) and you will get
+	a warning message.
+
+g:bufmru_wilditems = "bufnr,shortpath"
+	(checked always, v2 only)
+	How to display buffer names in the "wildmenu":
+	"bufnr"		with prepended buffer number ~
+    	"shortpath"	with pathshorten() applied to the bufname() ~
+	There is no error message for wrong items.
 
 ------------------------------------------------------------------------------
 TODO
 
 HISTORY {{{
+v2.7 (2009 May 08)
+* BF: 'fileformat' of wildmenu.vim and anwolib.vim set to [unix]! (Nathan
+  Neff, Bartosz Leper)
+* removed BufExplorer hooks
+* shorter isvalidbuf() check
+
+v2.6 (2009 Apr 30)
+* NF: 'timeoutlen' of Bufmru Mode set to 60000 ms (Nathan Neff)
+
+v2.5 (2009 Apr 30)
+* NF: BufExplorer hooks (needs special BufExplorer version 7.2.2a)
+
+v2.4 (2009 Apr 21)
+* Variables:
+  	g:bufmru_wilditems	customize wildmenu entries
+
+v2.3 (2009 Mar 27)
+* BF: g:bufmru_limit=0 now means unlimited (0 makes no sense otherwise)
+* needs anwolib#FitEcho()
+
+v2.2 (2009 Mar 09)
+* "wildmenu only" version!  removed code for g:bufmru_splashbufs=1
+* BF: now works better when 'lazyredraw' is set
+* added warning "Only one MRU buffer"
+
+v2.1 (2009 Mar 08)
+* with splashbufs=1: added messages "No older MRU buffers", "At start buffer"
+
 v2.0 (2009 Mar 05) (after v0.8.3)
 * dropped the default <sid>echo() function, now wildmenu is required
 * Functions:
@@ -150,6 +195,13 @@ v2.0 (2009 Mar 05) (after v0.8.3)
 * BF: unnamed buffers didn't get a name in the wildmenu (now "[unnamed]")
 * BF: ("auto fixed" by dropping <sid>echo()) with splashbufs=1, unitialized
   g:bufmru_buftabs in <sid>next() and <sid>prev() (Anton Sharonov)
+
+v1.0 (2009 Mar 05) (after v0.7.3)
+* BF: added <C-U> in :call idxz() to eat the range from {count}<Space>
+* BF: splashbufs=0: messages "At start buffer", "No more MRU buffers" weren't
+  displayed.  Now: change color of bufnames instead.
+* mod flag "+" -> "[+]"
+* "No _older_ MRU buffers"
 
 v0.8.3 (2009 Mar 04)
 * autoload/wildmenu.vim replaces autoload/buftabs.vim

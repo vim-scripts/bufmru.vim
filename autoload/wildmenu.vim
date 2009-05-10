@@ -1,10 +1,10 @@
 " a wildmenu object for the cmdline area
 " File:         wildmenu.vim
 " Created:      2009 Mar 02
-" Last Change:  2009 Mar 05
-" Rev Days:     3
+" Last Change:  2009 Apr 23
+" Rev Days:     7
 " Author:	Andy Wokula <anwoku@yahoo.de>
-" Version:	0.1
+" Version:	0.2
 " License:	Vim license
 
 " TODO
@@ -46,10 +46,11 @@ endfunc "}}}
 
 func! s:wildmenu.updatewild(showlist) "{{{
     let self.showlist = a:showlist
+    let self.lastindex = -1
     let len = len(self.showlist)
     " indx into showlist
     let self.indx = [0]
-    let width = winwidth(0) - 12
+    let width = anwolib#CmdlineWidth()
     let wildstrlen = -2
     let idx = 0
     while idx < len
@@ -66,6 +67,9 @@ func! s:wildmenu.updatewild(showlist) "{{{
 endfunc "}}}
 func! s:wildmenu.showwild( index ) "{{{
     let index = a:index < 0 ? 0 : a:index
+    if index == self.lastindex
+	return
+    endif
     let len = len(self.showlist)
     let indxlen = len(self.indx)
     let lnum = 0    " number of wildmode line
@@ -81,7 +85,7 @@ func! s:wildmenu.showwild( index ) "{{{
     let idx = self.indx[lnum]
     let beyidx = self.indx[lnum+1]
     if idx+1 == beyidx
-	let width = winwidth(0) - 12
+	let width = anwolib#CmdlineWidth()
 	let entry = self.showlist[idx]
 	let slen = strlen(entry)
 	if lnum==0 && slen+2 <= width || slen+4 <= width
@@ -113,6 +117,7 @@ func! s:wildmenu.showwild( index ) "{{{
 	    echon " >"
 	endif
     endif
+    let self.lastindex = index
 endfunc "}}}
 
 " vim:set fdm=marker:

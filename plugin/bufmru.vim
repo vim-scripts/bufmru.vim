@@ -2,13 +2,12 @@
 " File:         bufmru.vim
 " Vimscript:	#2346
 " Created:      2008 Aug 18
-" Last Change:  2009 Mar 05
-" Rev Days:     23
+" Last Change:  2009 May 08
+" Rev Days:     34
 " Author:	Andy Wokula <anwoku@yahoo.de>
-" Version:	2.0
-" Credits:	Anton Sharonov (g:bufmru_splashbufs)
+" Version:	2.7 (wildmenu only)
 " License:	Vim license
- 
+
 " Comments
 
 " Description: {{{1
@@ -18,11 +17,8 @@
 "   handy.
 
 " Usage: {{{1
-"   Usage highly depends on g:bufmru_splashbufs, see Configuration.
-"
 "   KEY(S)	    ACTION
-"   <Space>	    switch-to or show the most recently used buffer, enter
-"   		    Bufmru Mode
+"   <Space>	    show the most recently used buffer, enter Bufmru Mode
 "
 "   in BUFMRU MODE:
 "   f  b	    reach more MRU buffers (forward/backward)
@@ -37,23 +33,20 @@
 "   (e.g. <Space>) quits the mode and executes as usual.
 
 " Configuration: {{{1
-"   :let g:bufmru_splashbufs = 0
-"	(checked once) If 1, switch buffers instantly like with CTRL-^.  If
-"	0 (default), only show MRU buffer names in the command-line and
-"	switch to a buffer when you press e or <Enter>.
-"
 "   :let g:bufmru_switchkey = "<Space>"
 "	(checked once) Key to enter Bufmru Mode.
 "
 "   :let g:bufmru_confclose = 0
-"	(always) Use :confirm (1) when abandoning a modified buffer.
-"	Otherwise (0, default) you'll get an error message, unless 'hidden'
-"	is set.
+"	(always) Use :confirm (1) when switching buffers.  If a modified
+"	buffer cannot be abandoned (only happens with 'nohidden'), this will
+"	prompt you with a dialog.  Otherwise (0, default) you'll get an
+"	error message.
 "
 "   :let g:bufmru_bnrs = []
 "	(always) The internal stack of buffer numbers.  Normally, you'll
 "	leave this alone, but you can manually add or remove buffer numbers
-"	or initialize the list.  Don't worry about wrong numbers.
+"	or initialize the list.  Don't worry about wrong numbers (though
+"	duplicates aren't removed automatically).
 "
 "   :let g:bufmru_read_nummarks = 0
 "	(checked once; only if g:bufmru_bnrs still empty) Add the number
@@ -61,18 +54,25 @@
 "	Note: This adds buffers to the buffer list!
 "
 "   :let g:bufmru_limit = 40
-"	(often) Maximum number of entries to keep in the MRU list.
+"	(checked when adding a bufnr) Maximum number of entries to keep in
+"	the MRU list.
 "
 "   g:bufmru_wildmenu	(dictionary, initially not defined)
-"	(always, only for splashbufs=0) Instance of autoload/wildmenu.vim to
-"	show buffer names in a wildmenu-like list.  If not defined, bufmru
-"	tries to load the autoload script.  If that fails the value becomes
-"	empty ({}).  If values is {}, the default echo-method is used.
+"	(always) Instance of autoload/wildmenu.vim to show buffer names in a
+"	wildmenu-like list.  If not defined, bufmru tries to load the
+"	autoload script.  If that fails the value becomes empty ({}) -- and
+"	bufmru quite unusable.
+"
+"   :let g:bufmru_wilditems = "bufnr,shortpath"
+"	(always) How to display entries in the "wildmenu":
+"	"bufnr"		with prepended buffer number
+"	"shortpath"	with pathshorten() applied to the bufname() 
+"	There is no error message for wrong items.
 "
 " Notes: {{{1
 " - "checked once": (re-)source the script to apply the change
 " - "special buffer": 'buftype' not empty or 'previewwindow' set for the
-"   window.  Not a special buffer if 'buflisted' is off.
+"   window; not a special buffer if merely 'buflisted' is off.
 "
 " See Also: {{{1
 " - http://vim.wikia.com/wiki/Easier_buffer_switching
@@ -101,11 +101,6 @@ set cpo&vim
 "}}}
 
 " Customization: "{{{
-if !exists("g:bufmru_splashbufs")
-    let g:bufmru_splashbufs = 0
-endif
-let s:splash_const = g:bufmru_splashbufs
-
 if !exists("g:bufmru_confclose")
     let g:bufmru_confclose = 0
 endif
@@ -126,56 +121,43 @@ endif
 if !exists("g:bufmru_read_nummarks")
     let g:bufmru_read_nummarks = 0
 endif
+
+if !exists("g:bufmru_wilditems")
+    let g:bufmru_wilditems = "bufnr,shortpath"
+endif
+
 "}}}
+
 " Autocommands: "{{{
 augroup bufmru
-    if g:bufmru_splashbufs
-	au! BufEnter * if !s:noautocmd| call s:maketop(bufnr(""),1)| endif
-    else
-	au! BufEnter * call s:maketop(bufnr(""),1)
-    endif
+    au! BufEnter * call s:maketop(bufnr(""),1)
 augroup End "}}}
+
 " Mappings: {{{1
-if g:bufmru_splashbufs
-    exec "nmap" g:bufmru_switchkey "<SID>idxz<SID>buf<SID>m_"
-    nmap <SID>m_f	<SID>next<SID>buf<SID>m_
-    nmap <SID>m_b	<SID>prev<SID>buf<SID>m_
-    sil! unmap <SID>m_<Tab>
-    sil! unmap <SID>m_<S-Tab>
-    nmap <SID>m_!	<SID>bang<SID>m_
-    nmap <SID>m_<Enter>	<SID>raccept
-    nmap <SID>m_e	<SID>raccept
-    nmap <SID>m_<Esc>	<SID>reset
-    nmap <SID>m_q	<SID>reset
-    nmap <SID>m_	<SID>raccept
-else
-    exec "nmap" g:bufmru_switchkey "<SID>idxz<SID>echo<SID>m_"
-    nmap <SID>m_f	<SID>next<SID>echo<SID>m_
-    nmap <SID>m_b	<SID>prev<SID>echo<SID>m_
-    nmap <SID>m_<Tab>	<SID>m_f
-    nmap <SID>m_<S-Tab>	<SID>m_b
-    nmap <SID>m_<Enter>	<SID>buf<SID>maybe
-    nmap <SID>m_e	<SID>buf<SID>maybe
-    nmap <SID>m_!	<SID>bang
-    nn	 <SID>m_<Esc>	:<C-U><BS>
-    nn	 <SID>m_q	:<C-U><BS>
-    nn	 <SID>m_	:<C-U><BS>
-endif
-nmap <SID>m_y	<SID>yank<SID>m_
+exec "nmap" g:bufmru_switchkey "<SID>idxz<SID>echo<SID>m_"
+nmap <SID>m_f	    <SID>next<SID>echo<SID>m_
+nmap <SID>m_b	    <SID>prev<SID>echo<SID>m_
+nmap <SID>m_<Tab>   <SID>m_f
+nmap <SID>m_<S-Tab> <SID>m_b
+nmap <SID>m_<Enter> <SID>buf<SID>maybe<SID>m2
+nmap <SID>m_e	    <SID>buf<SID>maybe<SID>m2
+nmap <SID>m_!	    <SID>bang<SID>cleanup
+nn <script> <SID>m_<Esc> <SID>cleanup:<C-U><BS>
+nn <script> <SID>m_q     <SID>cleanup:<C-U><BS>
+nn <script> <SID>m_      <SID>cleanup:<C-U><BS>
+nmap <SID>m_y	    <SID>yank<SID>m_
 
 nnoremap <silent> <SID>idxz	:<C-U>call<sid>idxz()<cr>
 nnoremap <silent> <SID>next	:call<sid>next()<cr>
-nnoremap <silent> <SID>prev   	:call<sid>prev()<cr>
-nnoremap <silent> <SID>buf    	:call<sid>buf()<cr>
-nnoremap <silent> <SID>echo   	:call<sid>echo()<cr>
-nnoremap <silent> <SID>raccept 	:call<sid>reset(1)<cr>
-nnoremap <silent> <SID>reset 	:call<sid>reset(0)<cr>
-nnoremap <silent> <SID>yank   	:call<sid>yank()<cr>
+nnoremap <silent> <SID>prev	:call<sid>prev()<cr>
+nnoremap <silent> <SID>buf	:call<sid>buf()<cr>
+nnoremap <silent> <SID>echo	:call<sid>echo()<cr>
+nnoremap <silent> <SID>yank	:call<sid>yank()<cr>
 nnoremap <silent> <SID>bang	:call<sid>bang()<cr>
+nnoremap <silent> <SID>cleanup	:call<sid>cleanup()<cr>
 
 " conditional type ahead <SID>m_
-nmap	    <SID>maybe		<SID>m1<SID>m2
-nmap <expr> <SID>m1		<sid>maybe()
+nmap <expr> <SID>maybe		<sid>maybe()
 " Vim bug: cannot get the type ahead directly from an <expr> map
 " }}}
 
@@ -209,14 +191,14 @@ func! s:maketop(bnr, ...) "{{{
     if idx != 0
 	call insert(g:bufmru_bnrs, a:bnr)
     endif
-    sil! call remove(g:bufmru_bnrs, g:bufmru_limit, -1)
+    if g:bufmru_limit >= 1
+	sil! call remove(g:bufmru_bnrs, g:bufmru_limit, -1)
+    endif
 endfunc "}}}
 
 func! s:isvalidbuf(bnr) "{{{
-    return a:bnr >= 1
-	\ && bufexists(a:bnr)
+    return buflisted(a:bnr)
 	\ && getbufvar(a:bnr, '&buftype') == ""
-	\ && buflisted(a:bnr)
 endfunc "}}}
 
 func! s:bnr() "{{{
@@ -247,9 +229,6 @@ endfunc "}}}
 
 func! <sid>next() "{{{
     " let s:bidx = (s:bidx+1) % len(g:bufmru_bnrs)
-    if s:splash_const && !s:switch_ok
-	return
-    endif
     let s:bidx += 1
     let len = len(g:bufmru_bnrs)
     if s:bidx >= len
@@ -258,9 +237,6 @@ func! <sid>next() "{{{
 endfunc "}}}
 
 func! <sid>prev() "{{{
-    if s:splash_const && !s:switch_ok
-	return
-    endif
     let s:bidx -= 1
     if s:bidx < 1
 	" let s:bidx = len(g:bufmru_bnrs) - 1
@@ -270,20 +246,22 @@ endfunc "}}}
 
 func! <sid>idxz() "{{{
     let s:bidx = 1
-    let s:noautocmd = s:splash_const
-    let s:bstart = bufnr("")
     let s:switch_ok = 1
-    if !s:splash_const
-	if !exists("g:bufmru_wildmenu")
-	    try
-		let g:bufmru_wildmenu = wildmenu#New()
-	    catch
-		let g:bufmru_wildmenu = {}
-		echomsg "Bufmru: couldn't load autoload/wildmenu.vim"
-	    endtry
-	endif
-	let s:wildmenu_update = 1
+    if s:quitnormal
+	let s:sav_tm = &timeoutlen
+	let s:quitnormal = 0
     endif
+    set timeoutlen=60000
+    if !exists("g:bufmru_wildmenu")
+	try
+	    let g:bufmru_wildmenu = wildmenu#New()
+	catch
+	    let g:bufmru_wildmenu = {}
+	    echomsg "Bufmru: couldn't load autoload/wildmenu.vim"
+	endtry
+    endif
+    let s:wildmenu_update = 1
+    let s:n_show = 0
 endfunc "}}}
 
 func! <sid>buf() "{{{
@@ -302,6 +280,9 @@ func! <sid>buf() "{{{
 		echoerr "bufmru: No write since last change (press ! to override)"
 	    endtry
 	endif
+	if &lazyredraw
+	    redraw
+	endif
     catch
 	let s:switch_ok = 0
 	echohl ErrorMsg
@@ -313,13 +294,23 @@ endfunc "}}}
 func! <sid>bang() "{{{
     let bnr = s:bnr()
     exec "buf!" bnr
+    if &lazyredraw
+	redraw
+    endif
     let s:switch_ok = 1
 endfunc "}}}
 
 func! <sid>maybe() "{{{
     " return s:switch_ok ? "" : "<SID>m_"
     if s:switch_ok
-	nmap <SID>m2 <Nop>
+	if &lazyredraw
+	    nnoremap <SID>m2 <C-G>
+	else
+	    nnoremap <SID>m2 <Nop>
+	endif
+	" Vim bug?  <Nop> with 'lz' keeps the cursor in the cmdline and
+	" times out as if there were type ahead
+	call <sid>cleanup()
     else
 	nmap <SID>m2 <SID>m_
     endif
@@ -337,13 +328,25 @@ func! <sid>echo() "{{{
     endif
     call s:bnr()
     if s:wildmenu_update
-	let showlist = map(g:bufmru_bnrs[1:],
-	    \ 's:wname(fnamemodify(bufname(v:val),":t"))'
-	    \.'. "+"[!getbufvar(v:val,"&modified")]')
+	let witems = split(g:bufmru_wilditems, ",")
+	let wname_expr =
+	    \ (index(witems, "bufnr")>=0 ? 'v:val."-".' : '')
+	    \.(index(witems, "shortpath")>=0
+	    \ ? 's:wname(pathshorten(bufname(v:val)))'
+	    \ : 's:wname(fnamemodify(bufname(v:val),":t"))')
+	    \.'.(getbufvar(v:val,"&mod") ? "[+]" : "")'
+	let showlist = map(g:bufmru_bnrs[1:], wname_expr)
 	call g:bufmru_wildmenu.updatewild(showlist)
 	let s:wildmenu_update = 0
+	let s:n_show = len(g:bufmru_bnrs) - 1
     endif
-    call g:bufmru_wildmenu.showwild(s:bidx-1)
+    if s:n_show >= 1
+	call g:bufmru_wildmenu.showwild(s:bidx-1)
+    else
+	echohl WarningMsg
+	echo "Only one MRU buffer"
+	echohl None
+    endif
 endfunc "}}}
 
 func! <sid>yank() "{{{
@@ -351,20 +354,13 @@ func! <sid>yank() "{{{
     let fname = fnamemodify(bufname(bnr), ":p")
     let @@ = fname
     let cmd = "let @@ = '". fname. "'"
-    echo anwolib#TruncStr(cmd, &columns-12)
+    call anwolib#FitEcho(cmd)
 endfunc "}}}
 
-func! <sid>reset(accept) "{{{
-    call s:maketop(bufnr(""))
-    let s:noautocmd = 0
-    if !a:accept
-	" try to go back, no matter if this doesn't work:
-	exec "sil! buf!" s:bstart
-    endif
-    if !s:switch_ok
-	" <Enter>, e just fail - remove the error message suggesting the
-	" overriding
-	exec "norm! :\<C-U>"
+func! <sid>cleanup() "{{{
+    if !s:quitnormal
+	let &timeoutlen = s:sav_tm
+	let s:quitnormal = 1
     endif
 endfunc "}}}
 
@@ -380,7 +376,7 @@ func! s:initbnrs() "{{{
 endfunc "}}}
 
 " Do Init: {{{1
-let s:noautocmd = 0
+let s:quitnormal = 1
 
 if empty(g:bufmru_bnrs)
     if has("vim_starting")
